@@ -180,7 +180,7 @@ class CBlock(nn.Module):
         self.mlp = CMlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
 
     def forward(self, x):
-        x = x + self.pos_embed
+        x = x + self.pos_embed(x)
         x = x + self.drop_path(self.conv2(self.attn(self.conv1(self.norm1(x)))))
         x = x + self.drop_path(self.mlp(self.norm2(x)))
         return x
@@ -251,12 +251,13 @@ class MixVisionTransformer(nn.Module):
             norm_layer: (nn.Module): normalization layer
         """
         super().__init__()
+        embed_dim = 512
         self.num_classes = num_classes
         self.num_features = self.embed_dim = embed_dim  # num_features for consistency with other models
         norm_layer = norm_layer or partial(nn.LayerNorm, eps=1e-6) 
         embed_dim = [64, 128, 320, 512]
         depth = [3, 4, 8, 3]
-        num_heads = [1, 2, 5, 8]
+        num_heads = [2, 4, 10, 16]
         if hybrid_backbone is not None:
             self.patch_embed = HybridEmbed(
                 hybrid_backbone, img_size=img_size, in_chans=in_chans, embed_dim=embed_dim)
@@ -285,21 +286,21 @@ class MixVisionTransformer(nn.Module):
         self.blocks2 = nn.ModuleList([
             MixBlock(
                 dim=embed_dim[1], num_heads=num_heads[1], mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
-                drop=drop_rate, attn_drop=attn_drop_rate, drop_path=dpr[i], norm_layer=norm_layer)
+                drop=drop_rate, attn_drop=attn_drop_rate, drop_path=dpr[i + depth[0]], norm_layer=norm_layer)
             for i in range(depth[1])])
         self.blocks3 = nn.ModuleList([
             MixBlock(
                 dim=embed_dim[2], num_heads=num_heads[2], mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
-                drop=drop_rate, attn_drop=attn_drop_rate, drop_path=dpr[i], norm_layer=norm_layer)
+                drop=drop_rate, attn_drop=attn_drop_rate, drop_path=dpr[i + depth[0] + depth[1]], norm_layer=norm_layer)
             for i in range(depth[2])])
 
         self.blocks4 = nn.ModuleList([
             MixBlock(
                 dim=embed_dim[3], num_heads=num_heads[3], mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
-                drop=drop_rate, attn_drop=attn_drop_rate, drop_path=dpr[i], norm_layer=norm_layer)
+                drop=drop_rate, attn_drop=attn_drop_rate, drop_path=dpr[i + depth[0] + depth[1] + depth[2]], norm_layer=norm_layer)
             for i in range(depth[3])])
         
-        self.norm = norm_layer(embed_dim)
+        self.norm = norm_layer(embed_dim[3])
         # Representation layer
         # Classifier head
         self.head = nn.Linear(embed_dim[-1], num_classes) if num_classes > 0 else nn.Identity()
@@ -524,7 +525,7 @@ def deit_tiny(patch_size=16, **kwargs):
 
 
 def deit_small(patch_size=16, **kwargs):
-    model = VisionTransformer(
+    model = MixVisionTransformer(
         patch_size=patch_size, embed_dim=384, depth=12, num_heads=6, mlp_ratio=4,
         qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
     return model
