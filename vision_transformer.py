@@ -159,7 +159,7 @@ class MixBlock(nn.Module):
         sa = self.attn(sa)
         sa = sa.reshape(B, H, W, -1).permute(0, 3, 1, 2).contiguous()
         
-        x = x + self.drop_path(self.conv2(self.sa_weight* sa + self.conv_weight * conv))
+        x = residual + self.drop_path(self.conv2(self.sa_weight * sa + self.conv_weight * conv))
         x = x + self.drop_path(self.mlp(self.norm2(x)))
         return x
     
